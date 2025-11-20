@@ -9,7 +9,7 @@ rtrb = "0.3.2"
 thiserror = "2.0.17"
 
 cpal = { version = "0.16.0", optional = true }
-cxx-juce = { path = "/home/stephan/Development/playground/cxx-juce", optional = true }
+cxx-juce = { version = "0.8.0", optional = true }
 rtaudio = { version = "0.3.7", optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
 
