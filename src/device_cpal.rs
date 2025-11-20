@@ -1,20 +1,15 @@
 use std::fmt::Debug;
 
-use audio_blocks::{
-    AudioBlockInterleaved, AudioBlockInterleavedView, AudioBlockInterleavedViewMut,
-};
+use audio_blocks::AudioBlockInterleaved;
 use cpal::{
     SampleRate, Stream, StreamConfig,
     traits::{DeviceTrait, HostTrait, StreamTrait},
 };
 use rtrb::RingBuffer;
 
-use crate::{AudioDeviceError, Config, DeviceInfo};
-
-pub type AudioDeviceResult<T> = Result<T, Box<dyn std::error::Error>>;
-
-pub type Block<'a> = AudioBlockInterleavedView<'a, f32>;
-pub type BlockMut<'a> = AudioBlockInterleavedViewMut<'a, f32>;
+use crate::{
+    AudioDeviceError, AudioDeviceResult, AudioDeviceTrait, Block, BlockMut, Config, DeviceInfo,
+};
 
 pub struct AudioDevice {
     host: cpal::Host,
@@ -37,8 +32,8 @@ impl Debug for AudioDevice {
     }
 }
 
-impl AudioDevice {
-    pub fn new() -> AudioDeviceResult<Self> {
+impl AudioDeviceTrait for AudioDevice {
+    fn new() -> AudioDeviceResult<Self> {
         let host = cpal::default_host();
         let host_id = host.id();
 
@@ -55,32 +50,32 @@ impl AudioDevice {
         })
     }
 
-    pub fn api(&self) -> String {
+    fn api(&self) -> String {
         self.host_id.name().to_string()
     }
 
-    pub fn apis(&self) -> Vec<String> {
+    fn apis(&self) -> Vec<String> {
         cpal::available_hosts()
             .iter()
             .map(|api| api.name().to_string())
             .collect()
     }
 
-    pub fn input(&self) -> String {
+    fn input(&self) -> String {
         self.input_device
             .as_ref()
             .and_then(|d| d.name().ok())
             .unwrap_or_default()
     }
 
-    pub fn output(&self) -> String {
+    fn output(&self) -> String {
         self.output_device
             .as_ref()
             .and_then(|d| d.name().ok())
             .unwrap_or_default()
     }
 
-    pub fn inputs(&self) -> Vec<DeviceInfo> {
+    fn inputs(&self) -> Vec<DeviceInfo> {
         self.host
             .input_devices()
             .ok()
@@ -96,7 +91,7 @@ impl AudioDevice {
             .unwrap_or_default()
     }
 
-    pub fn outputs(&self) -> Vec<DeviceInfo> {
+    fn outputs(&self) -> Vec<DeviceInfo> {
         self.host
             .output_devices()
             .ok()
@@ -112,7 +107,7 @@ impl AudioDevice {
             .unwrap_or_default()
     }
 
-    pub fn set_api(&mut self, name: &str) -> AudioDeviceResult<()> {
+    fn set_api(&mut self, name: &str) -> AudioDeviceResult<()> {
         let host_id = cpal::available_hosts()
             .iter()
             .find(|api| api.name().contains(name))
@@ -129,7 +124,7 @@ impl AudioDevice {
         Ok(())
     }
 
-    pub fn set_input(&mut self, input: &str) -> AudioDeviceResult<()> {
+    fn set_input(&mut self, input: &str) -> AudioDeviceResult<()> {
         let device = self
             .host
             .input_devices()?
@@ -146,7 +141,7 @@ impl AudioDevice {
         Ok(())
     }
 
-    pub fn set_output(&mut self, output: &str) -> AudioDeviceResult<()> {
+    fn set_output(&mut self, output: &str) -> AudioDeviceResult<()> {
         let device = self
             .host
             .output_devices()?
@@ -163,7 +158,7 @@ impl AudioDevice {
         Ok(())
     }
 
-    pub fn start(
+    fn start(
         &mut self,
         config: Config,
         mut process_fn: impl FnMut(Block, BlockMut) + Send + 'static,
@@ -253,7 +248,7 @@ impl AudioDevice {
                         }
                     }
 
-                    let output_block = AudioBlockInterleavedViewMut::from_slice(
+                    let output_block = BlockMut::from_slice(
                         data,
                         config.num_output_channels,
                         data.len() / config.num_output_channels as usize,
@@ -273,7 +268,7 @@ impl AudioDevice {
         Ok(())
     }
 
-    pub fn stop(&mut self) -> AudioDeviceResult<()> {
+    fn stop(&mut self) -> AudioDeviceResult<()> {
         if let Some(stream) = self.output_stream.take() {
             stream.pause()?;
         }
@@ -281,50 +276,5 @@ impl AudioDevice {
             stream.pause()?;
         }
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use audio_blocks::{AudioBlock, AudioBlockOps};
-
-    use super::*;
-
-    #[test]
-    fn cpal_test() {
-        let mut device = AudioDevice::new().unwrap();
-        dbg!(device.apis());
-        dbg!(device.inputs());
-        dbg!(device.outputs());
-
-        dbg!(device.api());
-        dbg!(device.input());
-        dbg!(device.output());
-
-        device.set_api(&device.api()).unwrap();
-        device.set_input(&device.input()).unwrap();
-        device.set_output(&device.output()).unwrap();
-
-        device
-            .start(
-                Config {
-                    num_input_channels: 2,
-                    num_output_channels: 2,
-                    sample_rate: 48000,
-                    num_frames: 1024,
-                },
-                |input, mut output| {
-                    assert_eq!(input.num_frames(), 1024);
-                    assert_eq!(input.num_channels(), 2);
-                    assert_eq!(output.num_frames(), 1024);
-                    assert_eq!(output.num_channels(), 2);
-                    output.copy_from_block(&input);
-                },
-            )
-            .unwrap();
-
-        std::thread::sleep(std::time::Duration::from_secs(3));
-
-        device.stop().unwrap();
     }
 }

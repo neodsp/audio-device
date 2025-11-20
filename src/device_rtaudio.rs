@@ -1,12 +1,10 @@
 use std::fmt::Debug;
 
-use audio_blocks::{AudioBlockInterleavedView, AudioBlockInterleavedViewMut};
 use rtaudio::{DeviceParams, Host, StreamHandle, StreamOptions};
 
-use crate::{AudioDeviceError, AudioDeviceResult, Config, DeviceInfo};
-
-pub type Block<'a> = AudioBlockInterleavedView<'a, f32>;
-pub type BlockMut<'a> = AudioBlockInterleavedViewMut<'a, f32>;
+use crate::{
+    AudioDeviceError, AudioDeviceResult, AudioDeviceTrait, Block, BlockMut, Config, DeviceInfo,
+};
 
 pub struct AudioDevice {
     api: rtaudio::Api,
@@ -27,8 +25,8 @@ impl Debug for AudioDevice {
     }
 }
 
-impl AudioDevice {
-    pub fn new() -> AudioDeviceResult<Self> {
+impl AudioDeviceTrait for AudioDevice {
+    fn new() -> AudioDeviceResult<Self> {
         let host = Host::new(rtaudio::Api::Unspecified)?;
 
         Ok(Self {
@@ -39,26 +37,26 @@ impl AudioDevice {
         })
     }
 
-    pub fn api(&self) -> String {
+    fn api(&self) -> String {
         self.api.get_display_name()
     }
 
-    pub fn apis(&self) -> Vec<String> {
+    fn apis(&self) -> Vec<String> {
         rtaudio::compiled_apis()
             .iter()
             .map(|a| a.get_display_name())
             .collect()
     }
 
-    pub fn input(&self) -> String {
+    fn input(&self) -> String {
         self.input_device.name.clone()
     }
 
-    pub fn output(&self) -> String {
+    fn output(&self) -> String {
         self.output_device.name.clone()
     }
 
-    pub fn inputs(&self) -> Vec<DeviceInfo> {
+    fn inputs(&self) -> Vec<DeviceInfo> {
         Host::new(self.api.clone())
             .unwrap()
             .iter_input_devices()
@@ -69,7 +67,7 @@ impl AudioDevice {
             .collect()
     }
 
-    pub fn outputs(&self) -> Vec<DeviceInfo> {
+    fn outputs(&self) -> Vec<DeviceInfo> {
         Host::new(self.api.clone())
             .unwrap()
             .iter_output_devices()
@@ -80,7 +78,7 @@ impl AudioDevice {
             .collect()
     }
 
-    pub fn set_api(&mut self, name: &str) -> AudioDeviceResult<()> {
+    fn set_api(&mut self, name: &str) -> AudioDeviceResult<()> {
         self.api = rtaudio::compiled_apis()
             .iter()
             .find(|api| api.get_display_name().contains(name))
@@ -95,7 +93,7 @@ impl AudioDevice {
         Ok(())
     }
 
-    pub fn set_input(&mut self, input: &str) -> AudioDeviceResult<()> {
+    fn set_input(&mut self, input: &str) -> AudioDeviceResult<()> {
         self.input_device = Host::new(self.api.clone())
             .unwrap()
             .iter_input_devices()
@@ -105,17 +103,17 @@ impl AudioDevice {
         Ok(())
     }
 
-    pub fn set_output(&mut self, output: &str) -> AudioDeviceResult<()> {
+    fn set_output(&mut self, output: &str) -> AudioDeviceResult<()> {
         self.output_device = Host::new(self.api.clone())
             .unwrap()
-            .iter_input_devices()
+            .iter_output_devices()
             .find(|device| device.name.contains(output))
             .ok_or(AudioDeviceError::NotAvailable)?
             .clone();
         Ok(())
     }
 
-    pub fn start(
+    fn start(
         &mut self,
         config: Config,
         mut process_fn: impl FnMut(Block, BlockMut) + Send + 'static,
@@ -169,55 +167,10 @@ impl AudioDevice {
         Ok(())
     }
 
-    pub fn stop(&mut self) -> AudioDeviceResult<()> {
+    fn stop(&mut self) -> AudioDeviceResult<()> {
         if let Some(mut stream_handle) = self.stream_handle.take() {
             stream_handle.stop();
         }
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use audio_blocks::{AudioBlock, AudioBlockOps};
-
-    use super::*;
-
-    #[test]
-    fn rtaudio_test() {
-        let mut device = AudioDevice::new().unwrap();
-        dbg!(device.apis());
-        dbg!(device.inputs());
-        dbg!(device.outputs());
-
-        dbg!(device.api());
-        dbg!(device.input());
-        dbg!(device.output());
-
-        device.set_api(&device.api()).unwrap();
-        device.set_input(&device.input()).unwrap();
-        device.set_output(&device.output()).unwrap();
-
-        device
-            .start(
-                Config {
-                    num_input_channels: 2,
-                    num_output_channels: 2,
-                    sample_rate: 48000,
-                    num_frames: 1024,
-                },
-                |input, mut output| {
-                    assert_eq!(input.num_frames(), 1024);
-                    assert_eq!(input.num_channels(), 2);
-                    assert_eq!(output.num_frames(), 1024);
-                    assert_eq!(output.num_channels(), 2);
-                    output.copy_from_block(&input);
-                },
-            )
-            .unwrap();
-
-        std::thread::sleep(std::time::Duration::from_secs(3));
-
-        device.stop().unwrap();
     }
 }
