@@ -13,7 +13,7 @@ rtaudio = { version = "0.3.7", optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
 
 [features]
-default = ["rtaudio"]
+default = ["cpal"]
 cpal = ["dep:cpal"]
 rtaudio = ["dep:rtaudio"]
 serde = ["dep:serde"]

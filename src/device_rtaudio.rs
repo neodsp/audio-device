@@ -3,30 +3,10 @@ use std::fmt::Debug;
 use audio_blocks::{AudioBlockInterleavedView, AudioBlockInterleavedViewMut};
 use rtaudio::{DeviceParams, Host, StreamHandle, StreamOptions};
 
-pub type AudioDeviceResult<T> = Result<T, Box<dyn std::error::Error>>;
+use crate::{AudioDeviceError, AudioDeviceResult, Config, DeviceInfo};
 
 pub type Block<'a> = AudioBlockInterleavedView<'a, f32>;
 pub type BlockMut<'a> = AudioBlockInterleavedViewMut<'a, f32>;
-
-#[derive(Debug, Default)]
-pub struct Config {
-    pub num_input_channels: u16,
-    pub num_output_channels: u16,
-    pub sample_rate: u32,
-    pub num_frames: usize,
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum AudioDeviceError {
-    #[error("Wanted setting not available, leaving at default")]
-    NotAvailable,
-}
-
-#[derive(Debug)]
-pub struct DeviceInfo {
-    pub name: String,
-    pub num_channels: u16,
-}
 
 pub struct AudioDevice {
     api: rtaudio::Api,
