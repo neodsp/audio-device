@@ -5,10 +5,13 @@ use rtaudio::{DeviceParams, Host, StreamHandle, StreamOptions};
 
 pub type AudioDeviceResult<T> = Result<T, Box<dyn std::error::Error>>;
 
-pub type Block<'a> = AudioBlockInterleavedViewMut<'a, f32>;
+pub type Block<'a> = AudioBlockInterleavedView<'a, f32>;
+pub type BlockMut<'a> = AudioBlockInterleavedViewMut<'a, f32>;
 
 #[derive(Debug, Default)]
 pub struct Config {
+    pub num_input_channels: u16,
+    pub num_output_channels: u16,
     pub sample_rate: u32,
     pub num_frames: usize,
 }
@@ -20,23 +23,15 @@ pub enum AudioDeviceError {
 }
 
 #[derive(Debug)]
-pub struct Input {
-    name: String,
-    num_channels: u16,
-}
-
-#[derive(Debug)]
-pub struct Output {
-    name: String,
-    num_channels: u16,
+pub struct DeviceInfo {
+    pub name: String,
+    pub num_channels: u16,
 }
 
 pub struct AudioDevice {
     api: rtaudio::Api,
     input_device: rtaudio::DeviceInfo,
-    num_input_channels: u16,
     output_device: rtaudio::DeviceInfo,
-    num_output_channels: u16,
     stream_handle: Option<StreamHandle>,
 }
 
@@ -59,9 +54,7 @@ impl AudioDevice {
         Ok(Self {
             api: host.api(),
             input_device: host.default_input_device()?,
-            num_input_channels: host.default_input_device()?.input_channels as u16,
             output_device: host.default_output_device()?,
-            num_output_channels: host.default_input_device()?.output_channels as u16,
             stream_handle: None,
         })
     }
@@ -77,36 +70,30 @@ impl AudioDevice {
             .collect()
     }
 
-    pub fn input(&self) -> Input {
-        Input {
-            name: self.input_device.name.to_string(),
-            num_channels: self.input_device.input_channels as u16,
-        }
+    pub fn input(&self) -> String {
+        self.input_device.name.clone()
     }
 
-    pub fn output(&self) -> Output {
-        Output {
-            name: self.output_device.name.to_string(),
-            num_channels: self.output_device.output_channels as u16,
-        }
+    pub fn output(&self) -> String {
+        self.output_device.name.clone()
     }
 
-    pub fn inputs(&self) -> Vec<Input> {
+    pub fn inputs(&self) -> Vec<DeviceInfo> {
         Host::new(self.api.clone())
             .unwrap()
             .iter_input_devices()
-            .map(|i| Input {
+            .map(|i| DeviceInfo {
                 name: i.name,
                 num_channels: i.input_channels as u16,
             })
             .collect()
     }
 
-    pub fn outputs(&self) -> Vec<Output> {
+    pub fn outputs(&self) -> Vec<DeviceInfo> {
         Host::new(self.api.clone())
             .unwrap()
             .iter_output_devices()
-            .map(|i| Output {
+            .map(|i| DeviceInfo {
                 name: i.name,
                 num_channels: i.output_channels as u16,
             })
@@ -121,52 +108,49 @@ impl AudioDevice {
             .clone();
 
         // update defaults
+        let host = Host::new(self.api)?;
         self.input_device = host.default_input_device()?;
-        self.num_input_channels = host.default_input_device()?.input_channels as u16;
         self.output_device = host.default_output_device()?;
-        self.num_output_channels = host.default_input_device()?.output_channels as u16;
 
         Ok(())
     }
 
-    pub fn set_input(&mut self, input: &Input) -> AudioDeviceResult<()> {
+    pub fn set_input(&mut self, input: &str) -> AudioDeviceResult<()> {
         self.input_device = Host::new(self.api.clone())
             .unwrap()
             .iter_input_devices()
-            .find(|device| device.name.contains(&input.name))
+            .find(|device| device.name.contains(input))
             .ok_or(AudioDeviceError::NotAvailable)?
             .clone();
-        self.num_input_channels = input.num_channels;
         Ok(())
     }
 
-    pub fn set_output(&mut self, output: &Output) -> AudioDeviceResult<()> {
+    pub fn set_output(&mut self, output: &str) -> AudioDeviceResult<()> {
         self.output_device = Host::new(self.api.clone())
             .unwrap()
             .iter_input_devices()
-            .find(|device| device.name.contains(&output.name))
+            .find(|device| device.name.contains(output))
             .ok_or(AudioDeviceError::NotAvailable)?
             .clone();
-        self.num_output_channels = output.num_channels;
         Ok(())
     }
 
     pub fn start(
         &mut self,
         config: Config,
-        mut process_fn: impl FnMut(Block<'_>) + Send + 'static,
+        mut process_fn: impl FnMut(Block, BlockMut) + Send + 'static,
     ) -> AudioDeviceResult<()> {
         self.stream_handle = Some(
             Host::new(self.api.clone())?
                 .open_stream(
                     Some(DeviceParams {
                         device_id: self.output_device.id,
-                        num_channels: self.num_output_channels as u32,
+                        num_channels: config.num_output_channels as u32,
                         first_channel: 0,
                     }),
                     Some(DeviceParams {
                         device_id: self.input_device.id,
-                        num_channels: self.num_input_channels as u32,
+                        num_channels: config.num_input_channels as u32,
                         first_channel: 0,
                     }),
                     rtaudio::SampleFormat::Float32,
@@ -185,24 +169,17 @@ impl AudioDevice {
                           info: &rtaudio::StreamInfo,
                           _status: rtaudio::StreamStatus| {
                         if let rtaudio::Buffers::Float32 { output, input } = buffers {
-                            let input = AudioBlockInterleavedView::from_slice(
+                            let input = Block::from_slice(
                                 input,
                                 info.in_channels as u16,
                                 input.len() / info.in_channels,
                             );
-                            let mut output = AudioBlockInterleavedViewMut::from_slice(
+                            let output = BlockMut::from_slice(
                                 output,
                                 info.out_channels as u16,
                                 output.len() / info.out_channels,
                             );
-
-                            // copy whatever possible and never crash
-                            for (i, o) in input.frames().zip(output.frames_mut()) {
-                                let copy_len = i.len().min(o.len());
-                                o[..copy_len].copy_from_slice(&i[..copy_len]);
-                            }
-
-                            process_fn(output);
+                            process_fn(input, output);
                         }
                     },
                 )
@@ -222,7 +199,7 @@ impl AudioDevice {
 
 #[cfg(test)]
 mod tests {
-    use audio_blocks::AudioBlock;
+    use audio_blocks::{AudioBlock, AudioBlockOps};
 
     use super::*;
 
@@ -244,11 +221,17 @@ mod tests {
         device
             .start(
                 Config {
+                    num_input_channels: 2,
+                    num_output_channels: 2,
                     sample_rate: 48000,
                     num_frames: 512,
                 },
-                |block| {
-                    assert_eq!(block.num_frames(), 512);
+                |input, mut output| {
+                    assert_eq!(input.num_frames(), 512);
+                    assert_eq!(input.num_channels(), 2);
+                    assert_eq!(output.num_frames(), 512);
+                    assert_eq!(output.num_channels(), 2);
+                    output.copy_from_block(&input);
                 },
             )
             .unwrap();
