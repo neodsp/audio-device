@@ -224,12 +224,12 @@ mod tests {
                     num_input_channels: 2,
                     num_output_channels: 2,
                     sample_rate: 48000,
-                    num_frames: 512,
+                    num_frames: 1024,
                 },
                 |input, mut output| {
-                    assert_eq!(input.num_frames(), 512);
+                    assert_eq!(input.num_frames(), 1024);
                     assert_eq!(input.num_channels(), 2);
-                    assert_eq!(output.num_frames(), 512);
+                    assert_eq!(output.num_frames(), 1024);
                     assert_eq!(output.num_channels(), 2);
                     output.copy_from_block(&input);
                 },
