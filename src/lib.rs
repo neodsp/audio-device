@@ -6,6 +6,8 @@ pub mod device_cpal;
 pub mod device_juce;
 #[cfg(feature = "rtaudio")]
 pub mod device_rtaudio;
+#[cfg(feature = "web")]
+pub mod web_audio;
 
 #[cfg(feature = "cpal")]
 pub use device_cpal::AudioDevice;
@@ -13,6 +15,8 @@ pub use device_cpal::AudioDevice;
 pub use device_juce::AudioDevice;
 #[cfg(feature = "rtaudio")]
 pub use device_rtaudio::AudioDevice;
+#[cfg(feature = "web")]
+pub use web_audio::WebAudio;
 
 pub type AudioDeviceResult<T> = Result<T, Box<dyn std::error::Error>>;
 
