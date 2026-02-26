@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use audio_blocks::AudioBlockInterleaved;
 use cpal::{
-    SampleRate, Stream, StreamConfig,
+    Stream, StreamConfig,
     traits::{DeviceTrait, HostTrait, StreamTrait},
 };
 use rtrb::RingBuffer;
@@ -64,14 +64,14 @@ impl AudioDeviceTrait for AudioDevice {
     fn input(&self) -> String {
         self.input_device
             .as_ref()
-            .and_then(|d| d.name().ok())
+            .and_then(|d| Some(d.description().unwrap().name().to_string()))
             .unwrap_or_default()
     }
 
     fn output(&self) -> String {
         self.output_device
             .as_ref()
-            .and_then(|d| d.name().ok())
+            .and_then(|d| Some(d.description().unwrap().name().to_string()))
             .unwrap_or_default()
     }
 
@@ -82,7 +82,7 @@ impl AudioDeviceTrait for AudioDevice {
             .map(|devices| {
                 devices
                     .filter_map(|device| {
-                        let name = device.name().ok()?;
+                        let name = device.description().unwrap().name().to_string();
                         let num_channels = device.default_input_config().ok()?.channels() as u16;
                         Some(DeviceInfo { name, num_channels })
                     })
@@ -98,7 +98,7 @@ impl AudioDeviceTrait for AudioDevice {
             .map(|devices| {
                 devices
                     .filter_map(|device| {
-                        let name = device.name().ok()?;
+                        let name = device.description().unwrap().name().to_string();
                         let num_channels = device.default_output_config().ok()?.channels() as u16;
                         Some(DeviceInfo { name, num_channels })
                     })
@@ -128,13 +128,7 @@ impl AudioDeviceTrait for AudioDevice {
         let device = self
             .host
             .input_devices()?
-            .find(|device| {
-                device
-                    .name()
-                    .ok()
-                    .map(|name| name.contains(input))
-                    .unwrap_or(false)
-            })
+            .find(|device| device.description().unwrap().name().contains(input))
             .ok_or(AudioDeviceError::NotAvailable)?;
 
         self.input_device = Some(device);
@@ -145,13 +139,7 @@ impl AudioDeviceTrait for AudioDevice {
         let device = self
             .host
             .output_devices()?
-            .find(|device| {
-                device
-                    .name()
-                    .ok()
-                    .map(|name| name.contains(output))
-                    .unwrap_or(false)
-            })
+            .find(|device| device.description().unwrap().name().contains(output))
             .ok_or(AudioDeviceError::NotAvailable)?;
 
         self.output_device = Some(device);
@@ -194,7 +182,7 @@ impl AudioDeviceTrait for AudioDevice {
             // Use actual device channel count for the stream
             let input_stream_config = StreamConfig {
                 channels: config.num_input_channels,
-                sample_rate: SampleRate(config.sample_rate),
+                sample_rate: config.sample_rate,
                 buffer_size: cpal::BufferSize::Fixed(config.num_frames as u32),
             };
             let input_stream = input_device.build_input_stream(
@@ -223,7 +211,7 @@ impl AudioDeviceTrait for AudioDevice {
             // Use actual device channel count for the stream
             let output_stream_config = StreamConfig {
                 channels: config.num_output_channels,
-                sample_rate: SampleRate(config.sample_rate),
+                sample_rate: config.sample_rate,
                 buffer_size: cpal::BufferSize::Fixed(config.num_frames as u32),
             };
 
