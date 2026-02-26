@@ -173,16 +173,8 @@ impl AudioDeviceTrait for AudioDevice {
                           info: &rtaudio::StreamInfo,
                           _status: rtaudio::StreamStatus| {
                         if let rtaudio::Buffers::Float32 { output, input } = buffers {
-                            let input = Block::from_slice(
-                                input,
-                                info.in_channels as u16,
-                                input.len() / info.in_channels,
-                            );
-                            let output = BlockMut::from_slice(
-                                output,
-                                info.out_channels as u16,
-                                output.len() / info.out_channels,
-                            );
+                            let input = Block::from_slice(input, info.in_channels as u16);
+                            let output = BlockMut::from_slice(output, info.out_channels as u16);
                             process_fn(input, output);
                         }
                     },

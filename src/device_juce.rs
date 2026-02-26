@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use audio_blocks::{AudioBlock, AudioBlockInterleaved, AudioBlockMut};
+use audio_blocks::{AudioBlock, AudioBlockMut, Interleaved};
 use cxx_juce::{
     JUCE,
     juce_audio_devices::{
@@ -167,16 +167,16 @@ impl AudioDeviceTrait for AudioDevice {
 
 struct AudioCallback<F: FnMut(Block, BlockMut) + Send + 'static> {
     process_fn: F,
-    input_block: AudioBlockInterleaved<f32>,
-    output_block: AudioBlockInterleaved<f32>,
+    input_block: Interleaved<f32>,
+    output_block: Interleaved<f32>,
 }
 
 impl<F: FnMut(Block, BlockMut) + Send + 'static> AudioCallback<F> {
     pub fn new(process_fn: F) -> Self {
         Self {
             process_fn,
-            input_block: AudioBlockInterleaved::new(0, 0),
-            output_block: AudioBlockInterleaved::new(0, 0),
+            input_block: Interleaved::new(0, 0),
+            output_block: Interleaved::new(0, 0),
         }
     }
 }
@@ -186,8 +186,8 @@ impl<F: FnMut(Block, BlockMut) + Send + 'static> AudioIODeviceCallback for Audio
         let num_input_channels = device.input_channels() as u16;
         let num_output_channels = device.output_channels() as u16;
         let num_frames = device.buffer_size() as usize;
-        self.input_block = AudioBlockInterleaved::new(num_input_channels, num_frames);
-        self.output_block = AudioBlockInterleaved::new(num_output_channels, num_frames);
+        self.input_block = Interleaved::new(num_input_channels, num_frames);
+        self.output_block = Interleaved::new(num_output_channels, num_frames);
     }
 
     fn process_block(
@@ -197,9 +197,9 @@ impl<F: FnMut(Block, BlockMut) + Send + 'static> AudioIODeviceCallback for Audio
     ) {
         // resize buffers
         self.input_block
-            .set_active_size(input.channels() as u16, input.samples() as usize);
+            .set_visible(input.channels() as u16, input.samples() as usize);
         self.output_block
-            .set_active_size(output.channels() as u16, output.samples() as usize);
+            .set_visible(output.channels() as u16, output.samples() as usize);
 
         // copy input
         for ch in 0..input.channels() {

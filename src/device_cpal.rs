@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use audio_blocks::AudioBlockInterleaved;
+use audio_blocks::Interleaved;
 use cpal::{
     Stream, StreamConfig,
     traits::{DeviceTrait, HostTrait, StreamTrait},
@@ -216,9 +216,9 @@ impl AudioDeviceTrait for AudioDevice {
             };
 
             let mut input_block = if has_input {
-                AudioBlockInterleaved::<f32>::new(config.num_input_channels, config.num_frames)
+                Interleaved::new(config.num_input_channels, config.num_frames)
             } else {
-                AudioBlockInterleaved::new(0, 0)
+                Interleaved::new(0, 0)
             };
 
             let output_stream = output_device.build_output_stream(
@@ -236,11 +236,7 @@ impl AudioDeviceTrait for AudioDevice {
                         }
                     }
 
-                    let output_block = BlockMut::from_slice(
-                        data,
-                        config.num_output_channels,
-                        data.len() / config.num_output_channels as usize,
-                    );
+                    let output_block = BlockMut::from_slice(data, config.num_output_channels);
 
                     // Call user's process function
                     process_fn(input_block.view(), output_block);

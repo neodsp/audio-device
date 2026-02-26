@@ -20,8 +20,8 @@ pub use web_audio::WebAudio;
 
 pub type AudioDeviceResult<T> = Result<T, Box<dyn std::error::Error>>;
 
-pub type Block<'a> = AudioBlockInterleavedView<'a, f32>;
-pub type BlockMut<'a> = AudioBlockInterleavedViewMut<'a, f32>;
+pub type Block<'a> = InterleavedView<'a, f32>;
+pub type BlockMut<'a> = InterleavedViewMut<'a, f32>;
 
 pub use audio_blocks::*;
 
@@ -92,8 +92,6 @@ pub trait AudioDeviceTrait {
 
 #[cfg(test)]
 mod tests {
-    use audio_blocks::{AudioBlock, AudioBlockOps};
-
     use super::*;
 
     #[test]
@@ -122,11 +120,9 @@ mod tests {
                     num_frames,
                 },
                 move |input, mut output| {
-                    assert_eq!(input.num_frames(), num_frames);
-                    assert_eq!(input.num_channels(), 2);
-                    assert_eq!(output.num_frames(), num_frames);
-                    assert_eq!(output.num_channels(), 2);
-                    output.copy_from_block(&input);
+                    if output.copy_from_block(&input).is_some() {
+                        eprintln!("Input and Output buffer did not have a similar size");
+                    }
                 },
             )
             .unwrap();

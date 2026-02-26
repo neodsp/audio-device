@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use audio_blocks::{AudioBlock, AudioBlockOps};
+use audio_blocks::AudioBlockOpsMut;
 use audio_device::{AudioDevice, AudioDeviceTrait, Config};
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -31,13 +31,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                 num_frames: 1024,
             },
             move |input, mut output| {
-                assert_eq!(input.num_frames(), 1024);
-                assert_eq!(input.num_channels(), 2);
-
-                assert_eq!(output.num_frames(), 1024);
-                assert_eq!(output.num_channels(), 2);
-
-                output.copy_from_block(&input);
+                if output.copy_from_block(&input).is_some() {
+                    eprintln!("Input and Output buffer did not have a similar size");
+                }
             },
         )
         .unwrap();
