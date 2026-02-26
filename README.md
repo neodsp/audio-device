@@ -8,9 +8,9 @@ A backend-agnostic Rust library for managing audio input and output devices. Thi
 
 **Available Backends:**
 
-- **`juce`** (Default): Uses [`cxx-juce`](https://github.com/JamesHallowell/cxx-juce) to interface with the JUCE C++ framework.
+- **`rtaudio`** (Default): Uses the [RtAudio](https://codeberg.org/Meadowlark/rtaudio-rs) C++ library wrapper.
+- **`juce`**: Uses [`cxx-juce`](https://github.com/JamesHallowell/cxx-juce) to interface with the JUCE C++ framework.
 - **`cpal`**: Uses the [Cross-Platform Audio Library](https://github.com/RustAudio/cpal) (pure Rust).
-- **`rtaudio`**: Uses the [RtAudio](https://codeberg.org/Meadowlark/rtaudio-rs) C++ library wrapper.
 
 ### ⚠️ Important: Mutual Exclusivity
 
@@ -22,7 +22,7 @@ These backends are mutually exclusive. Trying to enable more than one (e.g., `cp
 
 Add `audio-device` to your `Cargo.toml`.
 
-To use the default backend (`juce`):
+To use the default backend (`rtaudio`):
 
 ```toml
 [dependencies]
