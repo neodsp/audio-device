@@ -1,12 +1,13 @@
 use std::fmt::Debug;
 
-use rtaudio::{DeviceParams, Host, StreamHandle, StreamOptions};
+use rtaudio::{DeviceParams, Host, StreamConfig, StreamFlags, StreamHandle};
 
 use crate::{
     AudioDeviceError, AudioDeviceResult, AudioDeviceTrait, Block, BlockMut, Config, DeviceInfo,
 };
 
 pub struct AudioDevice {
+    host: Host,
     api: rtaudio::Api,
     input_device: rtaudio::DeviceInfo,
     output_device: rtaudio::DeviceInfo,
@@ -27,12 +28,22 @@ impl Debug for AudioDevice {
 
 impl AudioDeviceTrait for AudioDevice {
     fn new() -> AudioDeviceResult<Self> {
-        let host = Host::new(rtaudio::Api::Unspecified)?;
-
+        let host = Host::default();
+        let input_device = host
+            .iter_input_devices()
+            .find(|d| d.is_default_input)
+            .cloned()
+            .unwrap();
+        let output_device = host
+            .iter_output_devices()
+            .find(|d| d.is_default_output)
+            .cloned()
+            .unwrap();
         Ok(Self {
             api: host.api(),
-            input_device: host.default_input_device()?,
-            output_device: host.default_output_device()?,
+            host,
+            input_device,
+            output_device,
             stream_handle: None,
         })
     }
@@ -49,11 +60,11 @@ impl AudioDeviceTrait for AudioDevice {
     }
 
     fn input(&self) -> String {
-        self.input_device.name.clone()
+        self.input_device.name().to_string()
     }
 
     fn output(&self) -> String {
-        self.output_device.name.clone()
+        self.output_device.name().to_string()
     }
 
     fn inputs(&self) -> Vec<DeviceInfo> {
@@ -61,7 +72,7 @@ impl AudioDeviceTrait for AudioDevice {
             .unwrap()
             .iter_input_devices()
             .map(|i| DeviceInfo {
-                name: i.name,
+                name: i.name().to_string(),
                 num_channels: i.input_channels as u16,
             })
             .collect()
@@ -72,7 +83,7 @@ impl AudioDeviceTrait for AudioDevice {
             .unwrap()
             .iter_output_devices()
             .map(|i| DeviceInfo {
-                name: i.name,
+                name: i.name().to_string(),
                 num_channels: i.output_channels as u16,
             })
             .collect()
@@ -87,27 +98,36 @@ impl AudioDeviceTrait for AudioDevice {
 
         // update defaults
         let host = Host::new(self.api)?;
-        self.input_device = host.default_input_device()?;
-        self.output_device = host.default_output_device()?;
+        self.input_device = host
+            .iter_input_devices()
+            .find(|d| d.is_default_input)
+            .cloned()
+            .unwrap();
+        self.output_device = host
+            .iter_output_devices()
+            .find(|d| d.is_default_output)
+            .cloned()
+            .unwrap();
+        self.host = host;
 
         Ok(())
     }
 
     fn set_input(&mut self, input: &str) -> AudioDeviceResult<()> {
-        self.input_device = Host::new(self.api.clone())
-            .unwrap()
+        self.input_device = self
+            .host
             .iter_input_devices()
-            .find(|device| device.name.contains(input))
+            .find(|device| device.name().contains(input))
             .ok_or(AudioDeviceError::NotAvailable)?
             .clone();
         Ok(())
     }
 
     fn set_output(&mut self, output: &str) -> AudioDeviceResult<()> {
-        self.output_device = Host::new(self.api.clone())
-            .unwrap()
+        self.output_device = self
+            .host
             .iter_output_devices()
-            .find(|device| device.name.contains(output))
+            .find(|device| device.name().contains(output))
             .ok_or(AudioDeviceError::NotAvailable)?
             .clone();
         Ok(())
@@ -120,23 +140,29 @@ impl AudioDeviceTrait for AudioDevice {
     ) -> AudioDeviceResult<()> {
         self.stream_handle = Some(
             Host::new(self.api.clone())?
-                .open_stream(
-                    Some(DeviceParams {
-                        device_id: self.output_device.id,
-                        num_channels: config.num_output_channels as u32,
+                .open_stream(&StreamConfig {
+                    output_device: Some(DeviceParams {
+                        device_id: Some(self.input_device.id.clone()),
+                        num_channels: Some(config.num_input_channels as u32),
                         first_channel: 0,
+                        fallback: true,
+                        no_device_fallback: true,
                     }),
-                    Some(DeviceParams {
-                        device_id: self.input_device.id,
-                        num_channels: config.num_input_channels as u32,
+                    input_device: Some(DeviceParams {
+                        device_id: Some(self.output_device.id.clone()),
+                        num_channels: Some(config.num_output_channels as u32),
                         first_channel: 0,
+                        fallback: true,
+                        no_device_fallback: true,
                     }),
-                    rtaudio::SampleFormat::Float32,
-                    config.sample_rate,
-                    config.num_frames as u32,
-                    StreamOptions::default(),
-                    move |_error| {},
-                )
+                    sample_format: rtaudio::SampleFormat::Float32,
+                    sample_rate: Some(config.sample_rate),
+                    buffer_frames: config.num_frames as u32,
+                    flags: StreamFlags::empty(),
+                    num_buffers: 2,
+                    priority: -1,
+                    name: String::new(),
+                })
                 .map_err(|(_, err)| err)?,
         );
         self.stream_handle
