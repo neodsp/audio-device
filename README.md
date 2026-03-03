@@ -4,7 +4,7 @@ A backend-agnostic Rust library for managing audio input and output devices. Thi
 
 ## Features
 
-`audio-device` abstracts over several popular audio backends. You can choose the one that best fits your needs via Cargo features.
+`audio-io` abstracts over several popular audio backends. You can choose the one that best fits your needs via Cargo features.
 
 **Available Backends:**
 
@@ -42,8 +42,7 @@ Regardless of the selected backend, the API remains consistent. Here is a basic 
 
 ```rust
 use std::error::Error;
-use audio_blocks::{AudioBlock, AudioBlockOps};
-use audio_device::{AudioDevice, AudioDeviceTrait, Config};
+use audio_io::{AudioBlock, AudioBlockOps, AudioDevice, AudioDeviceTrait, Config};
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Initialize the audio device (uses the backend selected via features)
