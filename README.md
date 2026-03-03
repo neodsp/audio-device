@@ -41,10 +41,9 @@ audio-io = { version = "0.5.0", default-features = false, features = ["cpal"] }
 Regardless of the selected backend, the API remains consistent. Here is a basic example of how to list devices and start an audio stream.
 
 ```rust
-use std::error::Error;
-use audio_io::{AudioBlock, AudioBlockOps, AudioDevice, AudioDeviceTrait, Config};
+use audio_io::{AudioBlockOpsMut, AudioDevice, AudioDeviceResult, AudioDeviceTrait, Config};
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> AudioDeviceResult<()> {
     // Initialize the audio device (uses the backend selected via features)
     let mut device = AudioDevice::new()?;
 
