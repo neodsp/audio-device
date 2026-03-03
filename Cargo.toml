@@ -6,7 +6,7 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 name = "audio-io"
 readme = "README.md"
-repository = "https://github.com/neodsp/audio-device"
+repository = "https://github.com/neodsp/audio-io"
 version = "0.5.0"
 
 [dependencies]
@@ -21,7 +21,7 @@ serde = { version = "1.0", features = ["derive"], optional = true }
 
 [features]
 cpal = ["dep:cpal"]
-default = ["cpal"]
+default = ["rtaudio"]
 juce = ["dep:cxx-juce"]
 rtaudio = ["dep:rtaudio"]
 serde = ["dep:serde"]
