@@ -38,42 +38,73 @@ audio-io = { version = "0.5.0", default-features = false, features = ["cpal"] }
 
 ## Usage
 
-Regardless of the selected backend, the API remains consistent. Here is a basic example of how to list devices and start an audio stream.
+### Listing devices
+
+```rust
+use audio_io::{AudioDevice, AudioDeviceResult, AudioDeviceTrait};
+
+fn main() -> AudioDeviceResult<()> {
+    let device = AudioDevice::new()?;
+
+    println!("API:     {}", device.api());
+    println!("APIs:    {:#?}", device.apis());
+    println!("Inputs:  {:#?}", device.inputs());
+    println!("Outputs: {:#?}", device.outputs());
+
+    Ok(())
+}
+```
+
+### Selecting devices
+
+Call `set_api`, `set_input`, or `set_output` with a substring of the desired name before starting the stream. Each method returns an error if no matching device is found.
+
+```rust
+use audio_io::{AudioDevice, AudioDeviceResult, AudioDeviceTrait, Config};
+
+fn main() -> AudioDeviceResult<()> {
+    let mut device = AudioDevice::new()?;
+
+    device.set_api("ALSA")?;
+    device.set_input("Focusrite")?;
+    device.set_output("Focusrite")?;
+
+    // ...
+    Ok(())
+}
+```
+
+> **Note:** Some backends (e.g. cpal on Linux) expose a virtual "Default Audio Device" as the
+> default that does not appear in the `inputs()` / `outputs()` lists. In that case, omit the
+> `set_input` / `set_output` calls and rely on the default selected by `AudioDevice::new()`.
+
+### Starting a stream
 
 ```rust
 use audio_io::{AudioBlockOpsMut, AudioDevice, AudioDeviceResult, AudioDeviceTrait, Config};
 
 fn main() -> AudioDeviceResult<()> {
-    // Initialize the audio device (uses the backend selected via features)
     let mut device = AudioDevice::new()?;
 
-    // Print available APIs and Devices
-    println!("Current API: {}", device.api());
-    println!("Available APIs: {:#?}", device.apis());
-    println!("Input Devices: {:#?}", device.inputs());
-    println!("Output Devices: {:#?}", device.outputs());
+    device.start(
+        Config {
+            num_input_channels: 2,
+            num_output_channels: 2,
+            sample_rate: 48000,
+            num_frames: 1024,
+        },
+        move |input, mut output| {
+            // Simple pass-through: copy input to output
+            output.copy_from_block(&input);
+        },
+    )?;
 
-    // Configure the stream
-    let config = Config {
-        num_input_channels: 2,
-        num_output_channels: 2,
-        sample_rate: 48000,
-        num_frames: 1024,
-    };
-
-    // Start the audio stream
-    // The callback receives an input block (read-only) and an output block (mutable)
-    device.start(config, move |input, mut output| {
-        // Simple pass-through: copy input to output
-        output.copy_from_block(&input);
-    })?;
-
-    // Keep the main thread alive while audio processes in the background
     std::thread::sleep(std::time::Duration::from_secs(5));
 
-    // Stop the stream
     device.stop()?;
 
     Ok(())
 }
 ```
+
+Set `num_input_channels` or `num_output_channels` to `0` to open an output-only or input-only stream.
