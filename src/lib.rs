@@ -1,31 +1,31 @@
 mod compile_error;
 
 #[cfg(feature = "cpal")]
-pub mod device_cpal;
+pub mod backend_cpal;
 #[cfg(feature = "juce")]
-pub mod device_juce;
+pub mod backend_juce;
 #[cfg(feature = "rtaudio")]
-pub mod device_rtaudio;
+pub mod backend_rtaudio;
 
 #[cfg(feature = "cpal")]
-pub use device_cpal::AudioDevice;
+pub use backend_cpal::AudioHost;
 #[cfg(feature = "juce")]
-pub use device_juce::AudioDevice;
+pub use backend_juce::AudioHost;
 #[cfg(feature = "rtaudio")]
-pub use device_rtaudio::AudioDevice;
+pub use backend_rtaudio::AudioHost;
 
-pub type AudioDeviceResult<T> = Result<T, Box<dyn std::error::Error>>;
+#[derive(thiserror::Error, Debug)]
+pub enum AudioHostError {
+    #[error("Device or API not found")]
+    NotFound,
+    #[error("Backend error: {0}")]
+    Backend(#[source] Box<dyn std::error::Error + Send + Sync>),
+}
 
 pub type Block<'a> = InterleavedView<'a, f32>;
 pub type BlockMut<'a> = InterleavedViewMut<'a, f32>;
 
 pub use audio_blocks::*;
-
-#[derive(thiserror::Error, Debug)]
-pub enum AudioDeviceError {
-    #[error("Wanted setting not available, leaving at default")]
-    NotAvailable,
-}
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -44,9 +44,9 @@ pub struct Config {
 }
 
 /// Trait defining the common interface for audio devices
-pub trait AudioDeviceTrait {
+pub trait AudioHostTrait {
     /// Create a new audio device with default settings
-    fn new() -> AudioDeviceResult<Self>
+    fn new() -> Result<Self, AudioHostError>
     where
         Self: Sized;
 
@@ -69,23 +69,23 @@ pub trait AudioDeviceTrait {
     fn outputs(&self) -> Vec<DeviceInfo>;
 
     /// Set the API/host by name
-    fn set_api(&mut self, name: &str) -> AudioDeviceResult<()>;
+    fn set_api(&mut self, name: &str) -> Result<(), AudioHostError>;
 
     /// Set the input device by name
-    fn set_input(&mut self, input: &str) -> AudioDeviceResult<()>;
+    fn set_input(&mut self, input: &str) -> Result<(), AudioHostError>;
 
     /// Set the output device by name
-    fn set_output(&mut self, output: &str) -> AudioDeviceResult<()>;
+    fn set_output(&mut self, output: &str) -> Result<(), AudioHostError>;
 
     /// Start the audio stream with the given configuration and process callback
     fn start(
         &mut self,
         config: Config,
         process_fn: impl FnMut(Block, BlockMut) + Send + 'static,
-    ) -> AudioDeviceResult<()>;
+    ) -> Result<(), AudioHostError>;
 
     /// Stop the audio stream
-    fn stop(&mut self) -> AudioDeviceResult<()>;
+    fn stop(&mut self) -> Result<(), AudioHostError>;
 }
 
 #[cfg(test)]
@@ -94,39 +94,38 @@ mod tests {
 
     #[test]
     fn test_audio_device() {
-        let mut device = AudioDevice::new().unwrap();
-        dbg!(device.apis());
-        dbg!(device.inputs());
-        dbg!(device.outputs());
+        let mut host = AudioHost::new().unwrap();
+        dbg!(host.apis());
+        dbg!(host.inputs());
+        dbg!(host.outputs());
 
-        dbg!(device.api());
-        dbg!(device.input());
-        dbg!(device.output());
+        dbg!(host.api());
+        dbg!(host.input());
+        dbg!(host.output());
 
-        device.set_api(&device.api()).unwrap();
-        device.set_input(&device.input()).unwrap();
-        device.set_output(&device.output()).unwrap();
+        host.set_api(&host.api()).unwrap();
+        host.set_input(&host.input()).unwrap();
+        host.set_output(&host.output()).unwrap();
 
         let num_frames = 1024;
 
-        device
-            .start(
-                Config {
-                    num_input_channels: 2,
-                    num_output_channels: 2,
-                    sample_rate: 48000,
-                    num_frames,
-                },
-                move |input, mut output| {
-                    if output.copy_from_block(&input).is_some() {
-                        eprintln!("Input and Output buffer did not have a similar size");
-                    }
-                },
-            )
-            .unwrap();
+        host.start(
+            Config {
+                num_input_channels: 2,
+                num_output_channels: 2,
+                sample_rate: 48000,
+                num_frames,
+            },
+            move |input, mut output| {
+                if output.copy_from_block(&input).is_some() {
+                    eprintln!("Input and Output buffer did not have a similar size");
+                }
+            },
+        )
+        .unwrap();
 
         std::thread::sleep(std::time::Duration::from_secs(3));
 
-        device.stop().unwrap();
+        host.stop().unwrap();
     }
 }

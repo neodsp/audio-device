@@ -2,20 +2,18 @@ use std::fmt::Debug;
 
 use rtaudio::{DeviceParams, Host, StreamConfig, StreamFlags, StreamHandle};
 
-use crate::{
-    AudioDeviceError, AudioDeviceResult, AudioDeviceTrait, Block, BlockMut, Config, DeviceInfo,
-};
+use crate::{AudioHostError, AudioHostTrait, Block, BlockMut, Config, DeviceInfo};
 
-pub struct AudioDevice {
+pub struct AudioHost {
     api: rtaudio::Api,
     input_device: Option<rtaudio::DeviceInfo>,
     output_device: Option<rtaudio::DeviceInfo>,
     stream_handle: Option<StreamHandle>,
 }
 
-impl Debug for AudioDevice {
+impl Debug for AudioHost {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("AudioDevice")
+        f.debug_struct("AudioHost")
             .field("backend", &"RtAudio")
             .field("is_running", &self.stream_handle.is_some())
             .field("apis", &self.apis())
@@ -25,8 +23,8 @@ impl Debug for AudioDevice {
     }
 }
 
-impl AudioDeviceTrait for AudioDevice {
-    fn new() -> AudioDeviceResult<Self> {
+impl AudioHostTrait for AudioHost {
+    fn new() -> Result<Self, AudioHostError> {
         let host = Host::default();
         let input_device = host
             .iter_input_devices()
@@ -89,14 +87,14 @@ impl AudioDeviceTrait for AudioDevice {
             .collect()
     }
 
-    fn set_api(&mut self, name: &str) -> AudioDeviceResult<()> {
+    fn set_api(&mut self, name: &str) -> Result<(), AudioHostError> {
         self.api = rtaudio::compiled_apis()
             .iter()
             .find(|api| api.get_display_name().contains(name))
-            .ok_or(AudioDeviceError::NotAvailable)?
+            .ok_or(AudioHostError::NotFound)?
             .clone();
 
-        let host = Host::new(self.api)?;
+        let host = Host::new(self.api).map_err(|e| AudioHostError::Backend(Box::new(e)))?;
         self.input_device = host
             .iter_input_devices()
             .find(|d| d.is_default_input)
@@ -109,23 +107,25 @@ impl AudioDeviceTrait for AudioDevice {
         Ok(())
     }
 
-    fn set_input(&mut self, input: &str) -> AudioDeviceResult<()> {
+    fn set_input(&mut self, input: &str) -> Result<(), AudioHostError> {
         self.input_device = Some(
-            Host::new(self.api)?
+            Host::new(self.api)
+                .map_err(|e| AudioHostError::Backend(Box::new(e)))?
                 .iter_input_devices()
                 .find(|device| device.name().contains(input))
-                .ok_or(AudioDeviceError::NotAvailable)?
+                .ok_or(AudioHostError::NotFound)?
                 .clone(),
         );
         Ok(())
     }
 
-    fn set_output(&mut self, output: &str) -> AudioDeviceResult<()> {
+    fn set_output(&mut self, output: &str) -> Result<(), AudioHostError> {
         self.output_device = Some(
-            Host::new(self.api)?
+            Host::new(self.api)
+                .map_err(|e| AudioHostError::Backend(Box::new(e)))?
                 .iter_output_devices()
                 .find(|device| device.name().contains(output))
-                .ok_or(AudioDeviceError::NotAvailable)?
+                .ok_or(AudioHostError::NotFound)?
                 .clone(),
         );
         Ok(())
@@ -135,7 +135,7 @@ impl AudioDeviceTrait for AudioDevice {
         &mut self,
         config: Config,
         mut process_fn: impl FnMut(Block, BlockMut) + Send + 'static,
-    ) -> AudioDeviceResult<()> {
+    ) -> Result<(), AudioHostError> {
         let input_params = if config.num_input_channels > 0 {
             self.input_device.as_ref().map(|d| DeviceParams {
                 device_id: Some(d.id.clone()),
@@ -161,7 +161,8 @@ impl AudioDeviceTrait for AudioDevice {
         };
 
         self.stream_handle = Some(
-            Host::new(self.api.clone())?
+            Host::new(self.api.clone())
+                .map_err(|e| AudioHostError::Backend(Box::new(e)))?
                 .open_stream(&StreamConfig {
                     input_device: input_params,
                     output_device: output_params,
@@ -173,7 +174,7 @@ impl AudioDeviceTrait for AudioDevice {
                     priority: -1,
                     name: String::new(),
                 })
-                .map_err(|(_, err)| err)?,
+                .map_err(|(_, err)| AudioHostError::Backend(Box::new(err)))?,
         );
         self.stream_handle
             .as_mut()
@@ -191,12 +192,13 @@ impl AudioDeviceTrait for AudioDevice {
                     },
                 )
             })
-            .transpose()?;
+            .transpose()
+            .map_err(|e| AudioHostError::Backend(Box::new(e)))?;
 
         Ok(())
     }
 
-    fn stop(&mut self) -> AudioDeviceResult<()> {
+    fn stop(&mut self) -> Result<(), AudioHostError> {
         if let Some(mut stream_handle) = self.stream_handle.take() {
             stream_handle.stop();
         }

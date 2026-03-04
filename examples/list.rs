@@ -1,7 +1,7 @@
-use audio_io::{AudioDevice, AudioDeviceResult, AudioDeviceTrait};
+use audio_io::{AudioHost, AudioHostError, AudioHostTrait};
 
-fn main() -> AudioDeviceResult<()> {
-    let device = AudioDevice::new()?;
+fn main() -> Result<(), AudioHostError> {
+    let device = AudioHost::new()?;
 
     // get available devices
     println!("APIs: {:#?}\n", device.apis());

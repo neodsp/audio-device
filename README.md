@@ -41,15 +41,15 @@ audio-io = { version = "0.5.0", default-features = false, features = ["cpal"] }
 ### Listing devices
 
 ```rust
-use audio_io::{AudioDevice, AudioDeviceResult, AudioDeviceTrait};
+use audio_io::{AudioHost, AudioHostError, AudioHostTrait};
 
-fn main() -> AudioDeviceResult<()> {
-    let device = AudioDevice::new()?;
+fn main() -> Result<(), AudioHostError> {
+    let host = AudioHost::new()?;
 
-    println!("API:     {}", device.api());
-    println!("APIs:    {:#?}", device.apis());
-    println!("Inputs:  {:#?}", device.inputs());
-    println!("Outputs: {:#?}", device.outputs());
+    println!("API:     {}", host.api());
+    println!("APIs:    {:#?}", host.apis());
+    println!("Inputs:  {:#?}", host.inputs());
+    println!("Outputs: {:#?}", host.outputs());
 
     Ok(())
 }
@@ -57,17 +57,17 @@ fn main() -> AudioDeviceResult<()> {
 
 ### Selecting devices
 
-Call `set_api`, `set_input`, or `set_output` with a substring of the desired name before starting the stream. Each method returns an error if no matching device is found.
+Call `set_api`, `set_input`, or `set_output` with a substring of the desired name before starting the stream. Each returns `Err(AudioHostError::NotFound)` if no matching device is found.
 
 ```rust
-use audio_io::{AudioDevice, AudioDeviceResult, AudioDeviceTrait, Config};
+use audio_io::{AudioHost, AudioHostError, AudioHostTrait, Config};
 
-fn main() -> AudioDeviceResult<()> {
-    let mut device = AudioDevice::new()?;
+fn main() -> Result<(), AudioHostError> {
+    let mut host = AudioHost::new()?;
 
-    device.set_api("ALSA")?;
-    device.set_input("Focusrite")?;
-    device.set_output("Focusrite")?;
+    host.set_api("ALSA")?;
+    host.set_input("Focusrite")?;
+    host.set_output("Focusrite")?;
 
     // ...
     Ok(())
@@ -76,17 +76,17 @@ fn main() -> AudioDeviceResult<()> {
 
 > **Note:** Some backends (e.g. cpal on Linux) expose a virtual "Default Audio Device" as the
 > default that does not appear in the `inputs()` / `outputs()` lists. In that case, omit the
-> `set_input` / `set_output` calls and rely on the default selected by `AudioDevice::new()`.
+> `set_input` / `set_output` calls and rely on the default selected by `AudioHost::new()`.
 
 ### Starting a stream
 
 ```rust
-use audio_io::{AudioBlockOpsMut, AudioDevice, AudioDeviceResult, AudioDeviceTrait, Config};
+use audio_io::{AudioBlockOpsMut, AudioHost, AudioHostError, AudioHostTrait, Config};
 
-fn main() -> AudioDeviceResult<()> {
-    let mut device = AudioDevice::new()?;
+fn main() -> Result<(), AudioHostError> {
+    let mut host = AudioHost::new()?;
 
-    device.start(
+    host.start(
         Config {
             num_input_channels: 2,
             num_output_channels: 2,
@@ -101,7 +101,7 @@ fn main() -> AudioDeviceResult<()> {
 
     std::thread::sleep(std::time::Duration::from_secs(5));
 
-    device.stop()?;
+    host.stop()?;
 
     Ok(())
 }

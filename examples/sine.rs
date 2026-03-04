@@ -1,4 +1,4 @@
-use audio_io::{AudioBlockOpsMut, AudioDevice, AudioDeviceResult, AudioDeviceTrait, Config};
+use audio_io::{AudioBlockOpsMut, AudioHost, AudioHostError, AudioHostTrait, Config};
 
 struct Oscillator {
     phasor: f32,
@@ -20,8 +20,8 @@ impl Oscillator {
     }
 }
 
-fn main() -> AudioDeviceResult<()> {
-    let mut device = AudioDevice::new()?;
+fn main() -> Result<(), AudioHostError> {
+    let mut device = AudioHost::new()?;
 
     let sample_rate = 48000;
     let mut osc = Oscillator::new(sample_rate, 440.0);

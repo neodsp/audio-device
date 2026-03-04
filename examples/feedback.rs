@@ -1,7 +1,7 @@
-use audio_io::{AudioBlockOpsMut, AudioDevice, AudioDeviceResult, AudioDeviceTrait, Config};
+use audio_io::{AudioBlockOpsMut, AudioHost, AudioHostError, AudioHostTrait, Config};
 
-fn main() -> AudioDeviceResult<()> {
-    let mut device = AudioDevice::new()?;
+fn main() -> Result<(), AudioHostError> {
+    let mut device = AudioHost::new()?;
 
     // start audio device
     device

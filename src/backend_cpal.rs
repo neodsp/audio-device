@@ -7,11 +7,9 @@ use cpal::{
 };
 use rtrb::RingBuffer;
 
-use crate::{
-    AudioDeviceError, AudioDeviceResult, AudioDeviceTrait, Block, BlockMut, Config, DeviceInfo,
-};
+use crate::{AudioHostError, AudioHostTrait, Block, BlockMut, Config, DeviceInfo};
 
-pub struct AudioDevice {
+pub struct AudioHost {
     host: cpal::Host,
     host_id: cpal::HostId,
     input_device: Option<cpal::Device>,
@@ -20,9 +18,9 @@ pub struct AudioDevice {
     input_stream: Option<Stream>,
 }
 
-impl Debug for AudioDevice {
+impl Debug for AudioHost {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("AudioDevice")
+        f.debug_struct("AudioHost")
             .field("backend", &"CPAL")
             .field("is_running", &self.output_stream.is_some())
             .field("apis", &self.apis())
@@ -32,8 +30,8 @@ impl Debug for AudioDevice {
     }
 }
 
-impl AudioDeviceTrait for AudioDevice {
-    fn new() -> AudioDeviceResult<Self> {
+impl AudioHostTrait for AudioHost {
+    fn new() -> Result<Self, AudioHostError> {
         let host = cpal::default_host();
         let host_id = host.id();
 
@@ -107,40 +105,42 @@ impl AudioDeviceTrait for AudioDevice {
             .unwrap_or_default()
     }
 
-    fn set_api(&mut self, name: &str) -> AudioDeviceResult<()> {
+    fn set_api(&mut self, name: &str) -> Result<(), AudioHostError> {
         let host_id = cpal::available_hosts()
             .iter()
             .find(|api| api.name().contains(name))
-            .ok_or(AudioDeviceError::NotAvailable)?
+            .ok_or(AudioHostError::NotFound)?
             .clone();
 
-        self.host = cpal::host_from_id(host_id.clone())?;
+        self.host = cpal::host_from_id(host_id.clone())
+            .map_err(|e| AudioHostError::Backend(Box::new(e)))?;
         self.host_id = host_id;
 
-        // Update default devices for new host
         self.input_device = self.host.default_input_device();
         self.output_device = self.host.default_output_device();
 
         Ok(())
     }
 
-    fn set_input(&mut self, input: &str) -> AudioDeviceResult<()> {
+    fn set_input(&mut self, input: &str) -> Result<(), AudioHostError> {
         let device = self
             .host
-            .input_devices()?
+            .input_devices()
+            .map_err(|e| AudioHostError::Backend(Box::new(e)))?
             .find(|device| device.description().unwrap().name().contains(input))
-            .ok_or(AudioDeviceError::NotAvailable)?;
+            .ok_or(AudioHostError::NotFound)?;
 
         self.input_device = Some(device);
         Ok(())
     }
 
-    fn set_output(&mut self, output: &str) -> AudioDeviceResult<()> {
+    fn set_output(&mut self, output: &str) -> Result<(), AudioHostError> {
         let device = self
             .host
-            .output_devices()?
+            .output_devices()
+            .map_err(|e| AudioHostError::Backend(Box::new(e)))?
             .find(|device| device.description().unwrap().name().contains(output))
-            .ok_or(AudioDeviceError::NotAvailable)?;
+            .ok_or(AudioHostError::NotFound)?;
 
         self.output_device = Some(device);
         Ok(())
@@ -150,16 +150,14 @@ impl AudioDeviceTrait for AudioDevice {
         &mut self,
         config: Config,
         mut process_fn: impl FnMut(Block, BlockMut) + Send + 'static,
-    ) -> AudioDeviceResult<()> {
+    ) -> Result<(), AudioHostError> {
         let has_input = self.input_device.is_some() && config.num_input_channels > 0;
         let has_output = self.output_device.is_some() && config.num_output_channels > 0;
 
-        // this architecture needs at least an output device
         if !has_output {
-            return Err(AudioDeviceError::NotAvailable.into());
+            return Err(AudioHostError::NotFound);
         }
 
-        // Only create ring buffer if we have input audio
         let (mut producer, mut consumer) = if has_input {
             let latency_ms = 100;
             let latency_samples = (latency_ms as f64 / 1000.0 * config.sample_rate as f64) as usize
@@ -168,7 +166,6 @@ impl AudioDeviceTrait for AudioDevice {
             let (mut producer, consumer) =
                 RingBuffer::<f32>::new(latency_samples + 10 * input_block_size);
 
-            // Pre-fill with silence for latency compensation
             for _ in 0..latency_samples {
                 let _ = producer.push(0.0);
             }
@@ -177,7 +174,6 @@ impl AudioDeviceTrait for AudioDevice {
             (None, None)
         };
 
-        // Start input stream if input device is selected and channels > 0
         if has_input {
             if let Some(input_device) = &self.input_device {
                 let input_stream_config = StreamConfig {
@@ -185,30 +181,32 @@ impl AudioDeviceTrait for AudioDevice {
                     sample_rate: config.sample_rate,
                     buffer_size: cpal::BufferSize::Fixed(config.num_frames as u32),
                 };
-                let input_stream = input_device.build_input_stream(
-                    &input_stream_config,
-                    move |data: &[f32], _info: &cpal::InputCallbackInfo| {
-                        if let Some(ref mut producer) = producer {
-                            for sample in data {
-                                if producer.push(*sample).is_err() {
-                                    eprintln!(
-                                        "AudioDevice: Could not push complete input into producer..."
-                                    );
+                let input_stream = input_device
+                    .build_input_stream(
+                        &input_stream_config,
+                        move |data: &[f32], _info: &cpal::InputCallbackInfo| {
+                            if let Some(ref mut producer) = producer {
+                                for sample in data {
+                                    if producer.push(*sample).is_err() {
+                                        eprintln!(
+                                            "AudioHost: Could not push complete input into producer..."
+                                        );
+                                    }
                                 }
                             }
-                        }
-                    },
-                    move |err| eprintln!("Error in input stream: {:?}", err),
-                    None,
-                )?;
-                input_stream.play()?;
+                        },
+                        move |err| eprintln!("Error in input stream: {:?}", err),
+                        None,
+                    )
+                    .map_err(|e| AudioHostError::Backend(Box::new(e)))?;
+                input_stream
+                    .play()
+                    .map_err(|e| AudioHostError::Backend(Box::new(e)))?;
                 self.input_stream = Some(input_stream);
             }
         }
 
-        // Start output stream if output device is selected
         if let Some(output_device) = &self.output_device {
-            // Use actual device channel count for the stream
             let output_stream_config = StreamConfig {
                 channels: config.num_output_channels,
                 sample_rate: config.sample_rate,
@@ -221,43 +219,48 @@ impl AudioDeviceTrait for AudioDevice {
                 Interleaved::new(1, 0)
             };
 
-            let output_stream = output_device.build_output_stream(
-                &output_stream_config,
-                move |data: &mut [f32], _info: &cpal::OutputCallbackInfo| {
-                    // Read input data from ring buffer if input is configured
-                    if let Some(ref mut consumer) = consumer {
-                        for frame in input_block.frames_mut() {
-                            for sample in frame {
-                                *sample = consumer.pop().unwrap_or_else(|_| {
-                                    eprintln!("AudioDevice: Could not pop sample from consumer");
-                                    0.0
-                                });
+            let output_stream = output_device
+                .build_output_stream(
+                    &output_stream_config,
+                    move |data: &mut [f32], _info: &cpal::OutputCallbackInfo| {
+                        if let Some(ref mut consumer) = consumer {
+                            for frame in input_block.frames_mut() {
+                                for sample in frame {
+                                    *sample = consumer.pop().unwrap_or_else(|_| {
+                                        eprintln!("AudioHost: Could not pop sample from consumer");
+                                        0.0
+                                    });
+                                }
                             }
                         }
-                    }
 
-                    let output_block = BlockMut::from_slice(data, config.num_output_channels);
+                        let output_block = BlockMut::from_slice(data, config.num_output_channels);
+                        process_fn(input_block.view(), output_block);
+                    },
+                    move |err| eprintln!("Error in output stream: {:?}", err),
+                    None,
+                )
+                .map_err(|e| AudioHostError::Backend(Box::new(e)))?;
 
-                    // Call user's process function
-                    process_fn(input_block.view(), output_block);
-                },
-                move |err| eprintln!("Error in output stream: {:?}", err),
-                None,
-            )?;
-
-            output_stream.play()?;
+            output_stream
+                .play()
+                .map_err(|e| AudioHostError::Backend(Box::new(e)))?;
             self.output_stream = Some(output_stream);
         }
 
         Ok(())
     }
 
-    fn stop(&mut self) -> AudioDeviceResult<()> {
+    fn stop(&mut self) -> Result<(), AudioHostError> {
         if let Some(stream) = self.output_stream.take() {
-            stream.pause()?;
+            stream
+                .pause()
+                .map_err(|e| AudioHostError::Backend(Box::new(e)))?;
         }
         if let Some(stream) = self.input_stream.take() {
-            stream.pause()?;
+            stream
+                .pause()
+                .map_err(|e| AudioHostError::Backend(Box::new(e)))?;
         }
         Ok(())
     }

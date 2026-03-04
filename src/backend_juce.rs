@@ -9,11 +9,9 @@ use cxx_juce::{
     },
 };
 
-use crate::{
-    AudioDeviceError, AudioDeviceResult, AudioDeviceTrait, Block, BlockMut, Config, DeviceInfo,
-};
+use crate::{AudioHostError, AudioHostTrait, Block, BlockMut, Config, DeviceInfo};
 
-pub struct AudioDevice {
+pub struct AudioHost {
     _juce: JUCE,
     apis: Vec<String>,
     device_manager: AudioDeviceManager,
@@ -22,9 +20,9 @@ pub struct AudioDevice {
     handle: Option<AudioCallbackHandle>,
 }
 
-impl Debug for AudioDevice {
+impl Debug for AudioHost {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("AudioDevice")
+        f.debug_struct("AudioHost")
             .field("backend", &"JUCE")
             .field("is_running", &self.handle.is_some())
             .field("apis", &self.apis())
@@ -34,14 +32,16 @@ impl Debug for AudioDevice {
     }
 }
 
-impl AudioDeviceTrait for AudioDevice {
-    fn new() -> AudioDeviceResult<Self> {
+impl AudioHostTrait for AudioHost {
+    fn new() -> Result<Self, AudioHostError> {
         let juce = JUCE::initialise();
         let mut device_manager = AudioDeviceManager::new(&juce);
-        device_manager.initialise(256, 256)?;
+        device_manager
+            .initialise(256, 256)
+            .map_err(|e| AudioHostError::Backend(Box::new(e)))?;
         let mut apis = Vec::new();
         for api in device_manager.device_types() {
-            apis.push(api.name());
+            apis.push(api.name().to_string());
         }
         Ok(Self {
             _juce: juce,
@@ -87,7 +87,7 @@ impl AudioDeviceTrait for AudioDevice {
         device_type
             .input_devices()
             .iter()
-            .map(|d| DeviceInfo {
+            .map(|d: &String| DeviceInfo {
                 name: d.clone(),
                 num_channels: 0,
             })
@@ -99,14 +99,14 @@ impl AudioDeviceTrait for AudioDevice {
         device_type
             .output_devices()
             .iter()
-            .map(|d| DeviceInfo {
+            .map(|d: &String| DeviceInfo {
                 name: d.clone(),
                 num_channels: 0,
             })
             .collect()
     }
 
-    fn set_api(&mut self, name: &str) -> AudioDeviceResult<()> {
+    fn set_api(&mut self, name: &str) -> Result<(), AudioHostError> {
         self.device_manager.set_current_audio_device_type(name);
         // update setup
         self.input_device = self.input();
@@ -114,24 +114,24 @@ impl AudioDeviceTrait for AudioDevice {
         Ok(())
     }
 
-    fn set_input(&mut self, input: &str) -> AudioDeviceResult<()> {
+    fn set_input(&mut self, input: &str) -> Result<(), AudioHostError> {
         let device = self
             .inputs()
             .iter()
             .cloned()
             .find(|p| p.name.contains(input))
-            .ok_or(AudioDeviceError::NotAvailable)?;
+            .ok_or(AudioHostError::NotFound)?;
         self.input_device = device.name.clone();
         Ok(())
     }
 
-    fn set_output(&mut self, output: &str) -> AudioDeviceResult<()> {
+    fn set_output(&mut self, output: &str) -> Result<(), AudioHostError> {
         let device = self
             .outputs()
             .iter()
             .cloned()
             .find(|p| p.name.contains(output))
-            .ok_or(AudioDeviceError::NotAvailable)?;
+            .ok_or(AudioHostError::NotFound)?;
         self.output_device = device.name.clone();
         Ok(())
     }
@@ -140,7 +140,7 @@ impl AudioDeviceTrait for AudioDevice {
         &mut self,
         config: Config,
         process_fn: impl FnMut(Block, BlockMut) + Send + 'static,
-    ) -> AudioDeviceResult<()> {
+    ) -> Result<(), AudioHostError> {
         let mut setup = self.device_manager.audio_device_setup();
         setup = setup.with_input_channels(ChannelCount::Custom(config.num_input_channels as i32));
         setup = setup.with_output_channels(ChannelCount::Custom(config.num_output_channels as i32));
@@ -157,7 +157,7 @@ impl AudioDeviceTrait for AudioDevice {
         Ok(())
     }
 
-    fn stop(&mut self) -> AudioDeviceResult<()> {
+    fn stop(&mut self) -> Result<(), AudioHostError> {
         if let Some(handle) = self.handle.take() {
             self.device_manager.remove_audio_callback(handle);
         }
