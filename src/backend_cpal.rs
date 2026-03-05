@@ -7,7 +7,7 @@ use cpal::{
 };
 use rtrb::RingBuffer;
 
-use crate::{AudioBackend, AudioHostError, Block, BlockMut, Config, DeviceInfo};
+use crate::{AudioBackend, Block, BlockMut, Config, DeviceInfo, Error};
 
 pub struct AudioHost {
     host: cpal::Host,
@@ -31,7 +31,7 @@ impl Debug for AudioHost {
 }
 
 impl AudioBackend for AudioHost {
-    fn new() -> Result<Self, AudioHostError> {
+    fn new() -> Result<Self, Error> {
         let host = cpal::default_host();
         let host_id = host.id();
 
@@ -105,15 +105,14 @@ impl AudioBackend for AudioHost {
             .unwrap_or_default()
     }
 
-    fn set_api(&mut self, name: &str) -> Result<(), AudioHostError> {
+    fn set_api(&mut self, name: &str) -> Result<(), Error> {
         let host_id = cpal::available_hosts()
             .iter()
             .find(|api| api.name().contains(name))
-            .ok_or(AudioHostError::NotFound)?
+            .ok_or(Error::NotFound)?
             .clone();
 
-        self.host = cpal::host_from_id(host_id.clone())
-            .map_err(|e| AudioHostError::Backend(Box::new(e)))?;
+        self.host = cpal::host_from_id(host_id.clone()).map_err(|e| Error::Backend(Box::new(e)))?;
         self.host_id = host_id;
 
         self.input_device = self.host.default_input_device();
@@ -122,25 +121,25 @@ impl AudioBackend for AudioHost {
         Ok(())
     }
 
-    fn set_input(&mut self, input: &str) -> Result<(), AudioHostError> {
+    fn set_input(&mut self, input: &str) -> Result<(), Error> {
         let device = self
             .host
             .input_devices()
-            .map_err(|e| AudioHostError::Backend(Box::new(e)))?
+            .map_err(|e| Error::Backend(Box::new(e)))?
             .find(|device| device.description().unwrap().name().contains(input))
-            .ok_or(AudioHostError::NotFound)?;
+            .ok_or(Error::NotFound)?;
 
         self.input_device = Some(device);
         Ok(())
     }
 
-    fn set_output(&mut self, output: &str) -> Result<(), AudioHostError> {
+    fn set_output(&mut self, output: &str) -> Result<(), Error> {
         let device = self
             .host
             .output_devices()
-            .map_err(|e| AudioHostError::Backend(Box::new(e)))?
+            .map_err(|e| Error::Backend(Box::new(e)))?
             .find(|device| device.description().unwrap().name().contains(output))
-            .ok_or(AudioHostError::NotFound)?;
+            .ok_or(Error::NotFound)?;
 
         self.output_device = Some(device);
         Ok(())
@@ -150,7 +149,7 @@ impl AudioBackend for AudioHost {
         &mut self,
         config: Config,
         mut process_fn: impl FnMut(Block, BlockMut) + Send + 'static,
-    ) -> Result<(), AudioHostError> {
+    ) -> Result<(), Error> {
         self.stop()?;
         config.validate()?;
 
@@ -158,7 +157,7 @@ impl AudioBackend for AudioHost {
         let has_output = self.output_device.is_some() && config.num_output_channels > 0;
 
         if !has_output {
-            return Err(AudioHostError::NotFound);
+            return Err(Error::NotFound);
         }
 
         let (mut producer, mut consumer) = if has_input {
@@ -201,10 +200,10 @@ impl AudioBackend for AudioHost {
                         move |err| eprintln!("Error in input stream: {:?}", err),
                         None,
                     )
-                    .map_err(|e| AudioHostError::Backend(Box::new(e)))?;
+                    .map_err(|e| Error::Backend(Box::new(e)))?;
                 input_stream
                     .play()
-                    .map_err(|e| AudioHostError::Backend(Box::new(e)))?;
+                    .map_err(|e| Error::Backend(Box::new(e)))?;
                 self.input_stream = Some(input_stream);
             }
         }
@@ -243,27 +242,23 @@ impl AudioBackend for AudioHost {
                     move |err| eprintln!("Error in output stream: {:?}", err),
                     None,
                 )
-                .map_err(|e| AudioHostError::Backend(Box::new(e)))?;
+                .map_err(|e| Error::Backend(Box::new(e)))?;
 
             output_stream
                 .play()
-                .map_err(|e| AudioHostError::Backend(Box::new(e)))?;
+                .map_err(|e| Error::Backend(Box::new(e)))?;
             self.output_stream = Some(output_stream);
         }
 
         Ok(())
     }
 
-    fn stop(&mut self) -> Result<(), AudioHostError> {
+    fn stop(&mut self) -> Result<(), Error> {
         if let Some(stream) = self.output_stream.take() {
-            stream
-                .pause()
-                .map_err(|e| AudioHostError::Backend(Box::new(e)))?;
+            stream.pause().map_err(|e| Error::Backend(Box::new(e)))?;
         }
         if let Some(stream) = self.input_stream.take() {
-            stream
-                .pause()
-                .map_err(|e| AudioHostError::Backend(Box::new(e)))?;
+            stream.pause().map_err(|e| Error::Backend(Box::new(e)))?;
         }
         Ok(())
     }

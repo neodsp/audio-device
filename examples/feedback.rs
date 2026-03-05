@@ -1,6 +1,6 @@
-use audio_io::{AudioBackend, AudioBlockOpsMut, AudioHost, AudioHostError, Config};
+use audio_io::{AudioBackend, AudioBlockOpsMut, AudioHost, Config, Error};
 
-fn main() -> Result<(), AudioHostError> {
+fn main() -> Result<(), Error> {
     let mut device = AudioHost::new()?;
 
     // start audio device

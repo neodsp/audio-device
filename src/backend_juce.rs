@@ -9,7 +9,7 @@ use cxx_juce::{
     },
 };
 
-use crate::{AudioHostError, AudioBackend, Block, BlockMut, Config, DeviceInfo};
+use crate::{AudioBackend, Block, BlockMut, Config, DeviceInfo, Error};
 
 pub struct AudioHost {
     _juce: JUCE,
@@ -33,12 +33,12 @@ impl Debug for AudioHost {
 }
 
 impl AudioBackend for AudioHost {
-    fn new() -> Result<Self, AudioHostError> {
+    fn new() -> Result<Self, Error> {
         let juce = JUCE::initialise();
         let mut device_manager = AudioDeviceManager::new(&juce);
         device_manager
             .initialise(256, 256)
-            .map_err(|e| AudioHostError::Backend(Box::new(e)))?;
+            .map_err(|e| Error::Backend(Box::new(e)))?;
         let mut apis = Vec::new();
         for api in device_manager.device_types() {
             apis.push(api.name().to_string());
@@ -106,7 +106,7 @@ impl AudioBackend for AudioHost {
             .collect()
     }
 
-    fn set_api(&mut self, name: &str) -> Result<(), AudioHostError> {
+    fn set_api(&mut self, name: &str) -> Result<(), Error> {
         self.device_manager.set_current_audio_device_type(name);
         // update setup
         self.input_device = self.input();
@@ -114,24 +114,24 @@ impl AudioBackend for AudioHost {
         Ok(())
     }
 
-    fn set_input(&mut self, input: &str) -> Result<(), AudioHostError> {
+    fn set_input(&mut self, input: &str) -> Result<(), Error> {
         let device = self
             .inputs()
             .iter()
             .cloned()
             .find(|p| p.name.contains(input))
-            .ok_or(AudioHostError::NotFound)?;
+            .ok_or(Error::NotFound)?;
         self.input_device = device.name.clone();
         Ok(())
     }
 
-    fn set_output(&mut self, output: &str) -> Result<(), AudioHostError> {
+    fn set_output(&mut self, output: &str) -> Result<(), Error> {
         let device = self
             .outputs()
             .iter()
             .cloned()
             .find(|p| p.name.contains(output))
-            .ok_or(AudioHostError::NotFound)?;
+            .ok_or(Error::NotFound)?;
         self.output_device = device.name.clone();
         Ok(())
     }
@@ -140,7 +140,7 @@ impl AudioBackend for AudioHost {
         &mut self,
         config: Config,
         process_fn: impl FnMut(Block, BlockMut) + Send + 'static,
-    ) -> Result<(), AudioHostError> {
+    ) -> Result<(), Error> {
         self.stop()?;
         config.validate()?;
 
@@ -160,7 +160,7 @@ impl AudioBackend for AudioHost {
         Ok(())
     }
 
-    fn stop(&mut self) -> Result<(), AudioHostError> {
+    fn stop(&mut self) -> Result<(), Error> {
         if let Some(handle) = self.handle.take() {
             self.device_manager.remove_audio_callback(handle);
         }

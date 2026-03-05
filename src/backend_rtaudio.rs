@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use rtaudio::{DeviceParams, Host, StreamConfig, StreamFlags, StreamHandle};
 
-use crate::{AudioHostError, AudioBackend, Block, BlockMut, Config, DeviceInfo};
+use crate::{AudioBackend, Block, BlockMut, Config, DeviceInfo, Error};
 
 pub struct AudioHost {
     api: rtaudio::Api,
@@ -24,7 +24,7 @@ impl Debug for AudioHost {
 }
 
 impl AudioBackend for AudioHost {
-    fn new() -> Result<Self, AudioHostError> {
+    fn new() -> Result<Self, Error> {
         let host = Host::default();
         let input_device = host
             .iter_input_devices()
@@ -87,14 +87,14 @@ impl AudioBackend for AudioHost {
             .collect()
     }
 
-    fn set_api(&mut self, name: &str) -> Result<(), AudioHostError> {
+    fn set_api(&mut self, name: &str) -> Result<(), Error> {
         self.api = rtaudio::compiled_apis()
             .iter()
             .find(|api| api.get_display_name().contains(name))
-            .ok_or(AudioHostError::NotFound)?
+            .ok_or(Error::NotFound)?
             .clone();
 
-        let host = Host::new(self.api).map_err(|e| AudioHostError::Backend(Box::new(e)))?;
+        let host = Host::new(self.api).map_err(|e| Error::Backend(Box::new(e)))?;
         self.input_device = host
             .iter_input_devices()
             .find(|d| d.is_default_input)
@@ -107,25 +107,25 @@ impl AudioBackend for AudioHost {
         Ok(())
     }
 
-    fn set_input(&mut self, input: &str) -> Result<(), AudioHostError> {
+    fn set_input(&mut self, input: &str) -> Result<(), Error> {
         self.input_device = Some(
             Host::new(self.api)
-                .map_err(|e| AudioHostError::Backend(Box::new(e)))?
+                .map_err(|e| Error::Backend(Box::new(e)))?
                 .iter_input_devices()
                 .find(|device| device.name().contains(input))
-                .ok_or(AudioHostError::NotFound)?
+                .ok_or(Error::NotFound)?
                 .clone(),
         );
         Ok(())
     }
 
-    fn set_output(&mut self, output: &str) -> Result<(), AudioHostError> {
+    fn set_output(&mut self, output: &str) -> Result<(), Error> {
         self.output_device = Some(
             Host::new(self.api)
-                .map_err(|e| AudioHostError::Backend(Box::new(e)))?
+                .map_err(|e| Error::Backend(Box::new(e)))?
                 .iter_output_devices()
                 .find(|device| device.name().contains(output))
-                .ok_or(AudioHostError::NotFound)?
+                .ok_or(Error::NotFound)?
                 .clone(),
         );
         Ok(())
@@ -135,7 +135,7 @@ impl AudioBackend for AudioHost {
         &mut self,
         config: Config,
         mut process_fn: impl FnMut(Block, BlockMut) + Send + 'static,
-    ) -> Result<(), AudioHostError> {
+    ) -> Result<(), Error> {
         self.stop()?;
         config.validate()?;
 
@@ -165,7 +165,7 @@ impl AudioBackend for AudioHost {
 
         self.stream_handle = Some(
             Host::new(self.api.clone())
-                .map_err(|e| AudioHostError::Backend(Box::new(e)))?
+                .map_err(|e| Error::Backend(Box::new(e)))?
                 .open_stream(&StreamConfig {
                     input_device: input_params,
                     output_device: output_params,
@@ -177,7 +177,7 @@ impl AudioBackend for AudioHost {
                     priority: -1,
                     name: String::new(),
                 })
-                .map_err(|(_, err)| AudioHostError::Backend(Box::new(err)))?,
+                .map_err(|(_, err)| Error::Backend(Box::new(err)))?,
         );
         self.stream_handle
             .as_mut()
@@ -196,12 +196,12 @@ impl AudioBackend for AudioHost {
                 )
             })
             .transpose()
-            .map_err(|e| AudioHostError::Backend(Box::new(e)))?;
+            .map_err(|e| Error::Backend(Box::new(e)))?;
 
         Ok(())
     }
 
-    fn stop(&mut self) -> Result<(), AudioHostError> {
+    fn stop(&mut self) -> Result<(), Error> {
         if let Some(mut stream_handle) = self.stream_handle.take() {
             stream_handle.stop();
         }

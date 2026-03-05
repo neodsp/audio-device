@@ -15,7 +15,7 @@ pub use backend_juce::AudioHost;
 pub use backend_rtaudio::AudioHost;
 
 #[derive(thiserror::Error, Debug)]
-pub enum AudioHostError {
+pub enum Error {
     #[error("Device or API not found")]
     NotFound,
     #[error("Invalid config: {0}")]
@@ -57,15 +57,17 @@ impl Default for Config {
 }
 
 impl Config {
-    pub fn validate(&self) -> Result<(), AudioHostError> {
+    pub fn validate(&self) -> Result<(), Error> {
         if self.num_input_channels == 0 && self.num_output_channels == 0 {
-            return Err(AudioHostError::InvalidConfig("at least one of num_input_channels or num_output_channels must be > 0"));
+            return Err(Error::InvalidConfig(
+                "at least one of num_input_channels or num_output_channels must be > 0",
+            ));
         }
         if self.sample_rate == 0 {
-            return Err(AudioHostError::InvalidConfig("sample_rate must be > 0"));
+            return Err(Error::InvalidConfig("sample_rate must be > 0"));
         }
         if self.num_frames == 0 {
-            return Err(AudioHostError::InvalidConfig("num_frames must be > 0"));
+            return Err(Error::InvalidConfig("num_frames must be > 0"));
         }
         Ok(())
     }
@@ -74,7 +76,7 @@ impl Config {
 /// Trait defining the common interface for audio devices
 pub trait AudioBackend {
     /// Create a new audio device with default settings
-    fn new() -> Result<Self, AudioHostError>
+    fn new() -> Result<Self, Error>
     where
         Self: Sized;
 
@@ -97,23 +99,23 @@ pub trait AudioBackend {
     fn outputs(&self) -> Vec<DeviceInfo>;
 
     /// Set the API/host by name
-    fn set_api(&mut self, name: &str) -> Result<(), AudioHostError>;
+    fn set_api(&mut self, name: &str) -> Result<(), Error>;
 
     /// Set the input device by name
-    fn set_input(&mut self, input: &str) -> Result<(), AudioHostError>;
+    fn set_input(&mut self, input: &str) -> Result<(), Error>;
 
     /// Set the output device by name
-    fn set_output(&mut self, output: &str) -> Result<(), AudioHostError>;
+    fn set_output(&mut self, output: &str) -> Result<(), Error>;
 
     /// Start the audio stream with the given configuration and process callback
     fn start(
         &mut self,
         config: Config,
         process_fn: impl FnMut(Block, BlockMut) + Send + 'static,
-    ) -> Result<(), AudioHostError>;
+    ) -> Result<(), Error>;
 
     /// Stop the audio stream
-    fn stop(&mut self) -> Result<(), AudioHostError>;
+    fn stop(&mut self) -> Result<(), Error>;
 }
 
 #[cfg(test)]

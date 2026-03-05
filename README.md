@@ -41,9 +41,9 @@ audio-io = { version = "0.5.0", default-features = false, features = ["cpal"] }
 ### Listing devices
 
 ```rust
-use audio_io::{AudioHost, AudioHostError, AudioBackend};
+use audio_io::{AudioHost, Error, AudioBackend};
 
-fn main() -> Result<(), AudioHostError> {
+fn main() -> Result<(), Error> {
     let host = AudioHost::new()?;
 
     println!("API:     {}", host.api());
@@ -57,12 +57,12 @@ fn main() -> Result<(), AudioHostError> {
 
 ### Selecting devices
 
-Call `set_api`, `set_input`, or `set_output` with a substring of the desired name before starting the stream. Each returns `Err(AudioHostError::NotFound)` if no matching device is found.
+Call `set_api`, `set_input`, or `set_output` with a substring of the desired name before starting the stream. Each returns `Err(Error::NotFound)` if no matching device is found.
 
 ```rust
-use audio_io::{AudioHost, AudioHostError, AudioBackend, Config};
+use audio_io::{AudioHost, Error, AudioBackend, Config};
 
-fn main() -> Result<(), AudioHostError> {
+fn main() -> Result<(), Error> {
     let mut host = AudioHost::new()?;
 
     host.set_api("ALSA")?;
@@ -81,9 +81,9 @@ fn main() -> Result<(), AudioHostError> {
 ### Starting a stream
 
 ```rust
-use audio_io::{AudioBlockOpsMut, AudioHost, AudioHostError, AudioBackend, Config};
+use audio_io::{AudioBlockOpsMut, AudioHost, Error, AudioBackend, Config};
 
-fn main() -> Result<(), AudioHostError> {
+fn main() -> Result<(), Error> {
     let mut host = AudioHost::new()?;
 
     host.start(

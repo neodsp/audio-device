@@ -1,6 +1,6 @@
-use audio_io::{AudioBackend, AudioHost, AudioHostError};
+use audio_io::{AudioBackend, AudioHost, Error};
 
-fn main() -> Result<(), AudioHostError> {
+fn main() -> Result<(), Error> {
     let device = AudioHost::new()?;
 
     // get available devices
