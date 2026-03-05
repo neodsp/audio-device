@@ -136,6 +136,8 @@ impl AudioHostTrait for AudioHost {
         config: Config,
         mut process_fn: impl FnMut(Block, BlockMut) + Send + 'static,
     ) -> Result<(), AudioHostError> {
+        self.stop()?;
+
         let input_params = if config.num_input_channels > 0 {
             self.input_device.as_ref().map(|d| DeviceParams {
                 device_id: Some(d.id.clone()),
