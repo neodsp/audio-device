@@ -72,7 +72,7 @@ impl Config {
 }
 
 /// Trait defining the common interface for audio devices
-pub trait AudioHostTrait {
+pub trait AudioBackend {
     /// Create a new audio device with default settings
     fn new() -> Result<Self, AudioHostError>
     where

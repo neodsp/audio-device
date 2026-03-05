@@ -1,4 +1,4 @@
-use audio_io::{AudioBlockOpsMut, AudioHost, AudioHostError, AudioHostTrait, Config};
+use audio_io::{AudioBackend, AudioBlockOpsMut, AudioHost, AudioHostError, Config};
 
 struct Oscillator {
     phasor: f32,

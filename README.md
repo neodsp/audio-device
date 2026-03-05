@@ -41,7 +41,7 @@ audio-io = { version = "0.5.0", default-features = false, features = ["cpal"] }
 ### Listing devices
 
 ```rust
-use audio_io::{AudioHost, AudioHostError, AudioHostTrait};
+use audio_io::{AudioHost, AudioHostError, AudioBackend};
 
 fn main() -> Result<(), AudioHostError> {
     let host = AudioHost::new()?;
@@ -60,7 +60,7 @@ fn main() -> Result<(), AudioHostError> {
 Call `set_api`, `set_input`, or `set_output` with a substring of the desired name before starting the stream. Each returns `Err(AudioHostError::NotFound)` if no matching device is found.
 
 ```rust
-use audio_io::{AudioHost, AudioHostError, AudioHostTrait, Config};
+use audio_io::{AudioHost, AudioHostError, AudioBackend, Config};
 
 fn main() -> Result<(), AudioHostError> {
     let mut host = AudioHost::new()?;
@@ -81,7 +81,7 @@ fn main() -> Result<(), AudioHostError> {
 ### Starting a stream
 
 ```rust
-use audio_io::{AudioBlockOpsMut, AudioHost, AudioHostError, AudioHostTrait, Config};
+use audio_io::{AudioBlockOpsMut, AudioHost, AudioHostError, AudioBackend, Config};
 
 fn main() -> Result<(), AudioHostError> {
     let mut host = AudioHost::new()?;

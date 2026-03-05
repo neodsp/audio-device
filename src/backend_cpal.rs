@@ -7,7 +7,7 @@ use cpal::{
 };
 use rtrb::RingBuffer;
 
-use crate::{AudioHostError, AudioHostTrait, Block, BlockMut, Config, DeviceInfo};
+use crate::{AudioBackend, AudioHostError, Block, BlockMut, Config, DeviceInfo};
 
 pub struct AudioHost {
     host: cpal::Host,
@@ -30,7 +30,7 @@ impl Debug for AudioHost {
     }
 }
 
-impl AudioHostTrait for AudioHost {
+impl AudioBackend for AudioHost {
     fn new() -> Result<Self, AudioHostError> {
         let host = cpal::default_host();
         let host_id = host.id();

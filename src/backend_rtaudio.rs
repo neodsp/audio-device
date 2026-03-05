@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use rtaudio::{DeviceParams, Host, StreamConfig, StreamFlags, StreamHandle};
 
-use crate::{AudioHostError, AudioHostTrait, Block, BlockMut, Config, DeviceInfo};
+use crate::{AudioHostError, AudioBackend, Block, BlockMut, Config, DeviceInfo};
 
 pub struct AudioHost {
     api: rtaudio::Api,
@@ -23,7 +23,7 @@ impl Debug for AudioHost {
     }
 }
 
-impl AudioHostTrait for AudioHost {
+impl AudioBackend for AudioHost {
     fn new() -> Result<Self, AudioHostError> {
         let host = Host::default();
         let input_device = host

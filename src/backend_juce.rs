@@ -9,7 +9,7 @@ use cxx_juce::{
     },
 };
 
-use crate::{AudioHostError, AudioHostTrait, Block, BlockMut, Config, DeviceInfo};
+use crate::{AudioHostError, AudioBackend, Block, BlockMut, Config, DeviceInfo};
 
 pub struct AudioHost {
     _juce: JUCE,
@@ -32,7 +32,7 @@ impl Debug for AudioHost {
     }
 }
 
-impl AudioHostTrait for AudioHost {
+impl AudioBackend for AudioHost {
     fn new() -> Result<Self, AudioHostError> {
         let juce = JUCE::initialise();
         let mut device_manager = AudioDeviceManager::new(&juce);
